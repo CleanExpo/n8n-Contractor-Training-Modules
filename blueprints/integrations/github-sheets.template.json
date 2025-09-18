@@ -1,0 +1,143 @@
+{
+  "name": "GitHub to Google Sheets Logger",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "{{WEBHOOK_PATH}}",
+        "options": {
+          "responseData": "lastNode"
+        }
+      },
+      "id": "github-webhook",
+      "name": "GitHub Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "webhookId": "github-webhook-id"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Parse GitHub webhook event\nconst items = [];\n\nfor (const item of $input.all()) {\n  const event = item.json;\n  const headers = item.headers;\n  \n  // Extract common GitHub event data\n  const eventType = headers['x-github-event'] || 'unknown';\n  const delivery = headers['x-github-delivery'] || '';\n  \n  let eventData = {\n    timestamp: new Date().toISOString(),\n    event_type: eventType,\n    delivery_id: delivery,\n    repository: '',\n    action: '',\n    user: '',\n    details: ''\n  };\n  \n  // Parse based on event type\n  if (event.repository) {\n    eventData.repository = event.repository.full_name;\n  }\n  \n  if (event.action) {\n    eventData.action = event.action;\n  }\n  \n  if (event.sender) {\n    eventData.user = event.sender.login;\n  }\n  \n  // Event-specific parsing\n  switch(eventType) {\n    case 'push':\n      eventData.details = `${event.commits?.length || 0} commits to ${event.ref}`;\n      break;\n    case 'pull_request':\n      eventData.details = `PR #${event.pull_request?.number}: ${event.pull_request?.title}`;\n      break;\n    case 'issues':\n      eventData.details = `Issue #${event.issue?.number}: ${event.issue?.title}`;\n      break;\n    case 'release':\n      eventData.details = `Release ${event.release?.tag_name}: ${event.release?.name}`;\n      break;\n    default:\n      eventData.details = JSON.stringify(event).substring(0, 200);\n  }\n  \n  items.push({ json: eventData });\n}\n\nreturn items;"
+      },
+      "id": "parse-event",
+      "name": "Parse GitHub Event",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "={{GOOGLE_SHEET_ID}}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{SHEET_RANGE}}",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "timestamp": "={{ $json.timestamp }}",
+            "event_type": "={{ $json.event_type }}",
+            "repository": "={{ $json.repository }}",
+            "action": "={{ $json.action }}",
+            "user": "={{ $json.user }}",
+            "details": "={{ $json.details }}",
+            "delivery_id": "={{ $json.delivery_id }}"
+          }
+        },
+        "options": {
+          "cellFormat": "USER_ENTERED",
+          "dataLocationType": "appendDataToSheetEnd"
+        }
+      },
+      "id": "append-to-sheet",
+      "name": "Append to Google Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [650, 300],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "{{CREDENTIAL_NAME}}",
+          "name": "Google Sheets Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "status",
+              "value": "success"
+            },
+            {
+              "name": "message",
+              "value": "Event logged to Google Sheets"
+            },
+            {
+              "name": "event_type",
+              "value": "={{ $node['Parse GitHub Event'].json.event_type }}"
+            },
+            {
+              "name": "timestamp",
+              "value": "={{ $node['Parse GitHub Event'].json.timestamp }}"
+            }
+          ]
+        }
+      },
+      "id": "response",
+      "name": "Webhook Response",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [850, 300]
+    }
+  ],
+  "connections": {
+    "GitHub Webhook": {
+      "main": [[{"node": "Parse GitHub Event", "type": "main", "index": 0}]]
+    },
+    "Parse GitHub Event": {
+      "main": [[{"node": "Append to Google Sheet", "type": "main", "index": 0}]]
+    },
+    "Append to Google Sheet": {
+      "main": [[{"node": "Webhook Response", "type": "main", "index": 0}]]
+    }
+  },
+  "active": false,
+  "settings": {
+    "saveManualExecutions": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all"
+  },
+  "tags": ["github", "google-sheets", "webhook"],
+  "meta": {
+    "templateId": "github-to-sheets",
+    "parameters": {
+      "WEBHOOK_PATH": {
+        "description": "Path for the webhook endpoint (e.g., 'github-events')",
+        "default": "github-events",
+        "required": true
+      },
+      "GOOGLE_SHEET_ID": {
+        "description": "Google Sheet ID from the URL",
+        "required": true,
+        "example": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms"
+      },
+      "SHEET_RANGE": {
+        "description": "Sheet name or range (e.g., 'Sheet1' or 'Events')",
+        "default": "Sheet1",
+        "required": true
+      },
+      "CREDENTIAL_NAME": {
+        "description": "Name of Google Sheets OAuth2 credential in n8n",
+        "required": true
+      }
+    }
+  }
+}

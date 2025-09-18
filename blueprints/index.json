@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "blueprints": [
+    {
+      "id": "github-to-sheets",
+      "name": "GitHub → Google Sheets",
+      "description": "Append GitHub webhook events as rows in a Google Sheet",
+      "workflow": "integrations/github-sheets.template.json",
+      "params": ["GOOGLE_SHEET_ID", "SHEET_RANGE", "CREDENTIAL_NAME", "WEBHOOK_PATH"],
+      "credentials": ["googleSheets"],
+      "tags": ["github", "google-sheets", "webhook", "automation"]
+    },
+    {
+      "id": "http-request",
+      "name": "HTTP Request Template",
+      "description": "Basic HTTP request with response formatting",
+      "workflow": "basic/http-request.json",
+      "params": ["API_URL", "HTTP_METHOD"],
+      "credentials": [],
+      "tags": ["http", "api", "basic"]
+    },
+    {
+      "id": "webhook-handler",
+      "name": "Webhook Handler",
+      "description": "Process incoming webhooks with validation",
+      "workflow": "basic/webhook-response.json",
+      "params": ["WEBHOOK_PATH"],
+      "credentials": [],
+      "tags": ["webhook", "basic"]
+    },
+    {
+      "id": "scheduler",
+      "name": "Scheduled Task",
+      "description": "Run tasks on a schedule with notifications",
+      "workflow": "basic/scheduler.json",
+      "params": ["SCHEDULE_INTERVAL", "NOTIFICATION_CHANNEL"],
+      "credentials": [],
+      "tags": ["scheduler", "cron", "basic"]
+    }
+  ]
+}

@@ -1,0 +1,67 @@
+{
+  "name": "Webhook Handler Template",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "webhook-endpoint",
+        "options": {
+          "responseData": "lastNode",
+          "responsePropertyName": "data"
+        }
+      },
+      "id": "webhook-node",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "webhookId": "webhook-template-id"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Process webhook data\nconst items = [];\n\nfor (const item of $input.all()) {\n  const payload = item.json;\n  \n  // Validate webhook payload\n  if (!payload.action) {\n    throw new Error('Missing required field: action');\n  }\n  \n  // Process based on action type\n  const processed = {\n    received_at: new Date().toISOString(),\n    action: payload.action,\n    data: payload.data || {},\n    processed: true\n  };\n  \n  items.push({ json: processed });\n}\n\nreturn items;"
+      },
+      "id": "process-webhook",
+      "name": "Process Webhook Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "status",
+              "value": "success"
+            },
+            {
+              "name": "message",
+              "value": "Webhook processed successfully"
+            },
+            {
+              "name": "timestamp",
+              "value": "={{ $now.toISO() }}"
+            }
+          ]
+        }
+      },
+      "id": "webhook-response",
+      "name": "Webhook Response",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [650, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [[{"node": "Process Webhook Data", "type": "main", "index": 0}]]
+    },
+    "Process Webhook Data": {
+      "main": [[{"node": "Webhook Response", "type": "main", "index": 0}]]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "tags": ["template", "webhook"]
+}

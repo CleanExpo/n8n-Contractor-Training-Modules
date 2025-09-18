@@ -1,0 +1,21 @@
+{
+  "mcpServers": {
+    "n8n-mcp": {
+      "command": "node",
+      "args": ["server.js"],
+      "env": {
+        "N8N_API_URL": "http://localhost:5678",
+        "N8N_API_KEY": "cli-dev-token",
+        "MCP_MODE": "stdio",
+        "LOG_LEVEL": "info"
+      }
+    },
+    "n8n-mcp-http": {
+      "url": "http://localhost:3003",
+      "headers": {
+        "Authorization": "Bearer mcp-dev-token"
+      },
+      "transport": "http"
+    }
+  }
+}

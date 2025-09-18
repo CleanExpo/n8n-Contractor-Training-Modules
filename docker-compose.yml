@@ -16,10 +16,6 @@ services:
       - N8N_BASIC_AUTH_ACTIVE=true
       - N8N_BASIC_AUTH_USER=admin
       - N8N_BASIC_AUTH_PASSWORD=please-change-me
-      # API: set an access token (bearer) you'll use from the CLI
-      - N8N_PERSONAL_ACCESS_TOKENS_ENABLED=true
-      - N8N_PERSONAL_ACCESS_TOKENS_TOKENS_0_NAME=cli
-      - N8N_PERSONAL_ACCESS_TOKENS_TOKENS_0_VALUE=cli-dev-token
     volumes:
       - n8n_data:/home/node/.n8n
 
