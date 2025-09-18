@@ -23,6 +23,8 @@ Spec-Driven Development flips the script on traditional software development. Fo
 
 ## ⚡ Get started
 
+### Option 1: Photo Album Organizer (Spec-Driven Development)
+
 1. **Install Specify**
    Initialize your project depending on the coding agent you're using:
    ```bash
@@ -43,6 +45,36 @@ Spec-Driven Development flips the script on traditional software development. Fo
 
 4. **Break down and implement**
    Use `/tasks` to create an actionable task list, then ask your agent to implement the feature.
+
+### Option 2: n8n Development Environment
+
+1. **Prerequisites**
+   - Docker Desktop installed and running
+   - PowerShell (Windows) or Bash (Linux/macOS)
+
+2. **Start n8n**
+   ```powershell
+   # Windows PowerShell
+   .\scripts\start-n8n.ps1
+   
+   # Or using Docker Compose directly
+   docker-compose up -d
+   ```
+
+3. **Access n8n**
+   - URL: http://localhost:5678
+   - Username: `admin`
+   - Password: `please-change-me`
+   - API Token: `cli-dev-token`
+
+4. **Stop n8n**
+   ```powershell
+   # Windows PowerShell
+   .\scripts\stop-n8n.ps1
+   
+   # Or using Docker Compose directly
+   docker-compose down
+   ```
 
 ## 📽️ Project Overview
 
