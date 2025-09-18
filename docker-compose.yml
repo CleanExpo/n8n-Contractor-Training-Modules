@@ -23,5 +23,26 @@ services:
     volumes:
       - n8n_data:/home/node/.n8n
 
+  n8n-mcp:
+    image: ghcr.io/czlonkowski/n8n-mcp:latest
+    restart: unless-stopped
+    ports:
+      - "3003:3003"
+    environment:
+      - MCP_MODE=http
+      - LOG_LEVEL=info
+      - DISABLE_CONSOLE_OUTPUT=false
+      - N8N_API_URL=http://n8n:5678
+      - N8N_API_KEY=cli-dev-token
+      - PORT=3003
+      - AUTH_TOKEN=mcp-dev-token
+    depends_on:
+      - n8n
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3003/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
 volumes:
   n8n_data:
