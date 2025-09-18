@@ -1,0 +1,256 @@
+{
+  "name": "GitHub → n8n Auto-Sync (Update or Create)",
+  "active": false,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "{{WEBHOOK_PATH}}",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "1",
+      "name": "GitHub Webhook (push)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [220, 260],
+      "webhookId": "github-auto-sync"
+    },
+    {
+      "parameters": {
+        "functionCode": "const owner = $json.repository.owner.login;\nconst repo = $json.repository.name;\nconst afterSha = $json.after;\nconst branch = $json.ref?.split('/').pop() || '{{DEFAULT_BRANCH}}';\nreturn [{ owner, repo, afterSha, branch }];"
+      },
+      "id": "2",
+      "name": "Extract Params",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 2,
+      "position": [460, 260]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{'https://api.github.com/repos/' + $json.owner + '/' + $json.repo + '/commits/' + $json.afterSha}}",
+        "jsonParameters": true,
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "3",
+      "name": "GitHub Get Commit",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [700, 260],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "{{GITHUB_CREDENTIAL_ID}}",
+          "name": "GitHub API Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const bpFiles = (items[0].json.files || []).filter(f => {\n  return (f.status === 'added' || f.status === 'modified') && \n         f.filename.startsWith('{{BLUEPRINTS_PATH}}') && \n         f.filename.endsWith('.json');\n});\nreturn bpFiles.map(f => ({ \n  file: f.filename, \n  owner: $json.owner, \n  repo: $json.repo, \n  branch: $json.branch \n}));"
+      },
+      "id": "4",
+      "name": "Filter Blueprints",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 2,
+      "position": [940, 260]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "5",
+      "name": "Split Batches",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 1,
+      "position": [1140, 260]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{'https://api.github.com/repos/' + $json.owner + '/' + $json.repo + '/contents/' + $json.file + '?ref=' + $json.branch}}",
+        "jsonParameters": true,
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "6",
+      "name": "GitHub Get File",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1350, 200],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "{{GITHUB_CREDENTIAL_ID}}",
+          "name": "GitHub API Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const content = $json.content;\nif (!content) throw new Error('No content found in GitHub response');\nconst buf = Buffer.from(content, 'base64');\nconst text = buf.toString('utf8');\nlet wf;\ntry {\n  wf = JSON.parse(text);\n} catch (e) {\n  throw new Error('Invalid JSON in blueprint: ' + e.message);\n}\n// Ensure workflow has required fields\nif (!wf.name) throw new Error('Workflow missing name field');\nif (!wf.nodes) wf.nodes = [];\nif (!wf.connections) wf.connections = {};\n\nreturn [{ \n  workflow: wf, \n  filename: $json.path,\n  owner: $items(0).json.owner,\n  repo: $items(0).json.repo\n}];"
+      },
+      "id": "7",
+      "name": "Decode JSON",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 2,
+      "position": [1560, 200]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{N8N_BASE_URL}}/api/v1/workflows",
+        "jsonParameters": true,
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "8",
+      "name": "Get Existing Workflows",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1770, 120],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "{{N8N_API_CREDENTIAL_ID}}",
+          "name": "n8n API Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const wf = items[0].json.workflow;\nconst allWorkflows = items[0].json.data || [];\nconst existingMatch = allWorkflows.find(w => w.name === wf.name);\n\n// Prepare workflow for upsert\nconst workflowData = {\n  ...wf,\n  active: false  // Always import as inactive for safety\n};\n\nif (existingMatch) {\n  // Update: preserve ID and some settings\n  workflowData.id = existingMatch.id;\n  workflowData.active = existingMatch.active;  // Keep activation status\n}\n\nreturn [{ \n  workflow: workflowData, \n  existing: existingMatch,\n  action: existingMatch ? 'update' : 'create',\n  filename: items[0].json.filename\n}];"
+      },
+      "id": "9",
+      "name": "Match By Name",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 2,
+      "position": [1980, 200]
+    },
+    {
+      "parameters": {
+        "method": "={{$json.existing ? 'PUT' : 'POST'}}",
+        "url": "={{N8N_BASE_URL + '/api/v1/workflows' + ($json.existing ? '/' + $json.existing.id : '')}}",
+        "jsonParameters": true,
+        "sendBody": true,
+        "bodyParametersJson": "={{JSON.stringify($json.workflow)}}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "10",
+      "name": "Upsert Workflow",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [2200, 200],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "{{N8N_API_CREDENTIAL_ID}}",
+          "name": "n8n API Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "// Log the result\nconst result = {\n  success: true,\n  action: $json.action,\n  workflow: $json.name,\n  filename: $items(0).json.filename,\n  id: $json.id,\n  timestamp: new Date().toISOString()\n};\n\nreturn [result];"
+      },
+      "id": "11",
+      "name": "Log Result",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 2,
+      "position": [2420, 200]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Check if more batches to process\nreturn items;"
+      },
+      "id": "12",
+      "name": "Next Batch",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [2640, 260]
+    }
+  ],
+  "connections": {
+    "GitHub Webhook (push)": {
+      "main": [[{ "node": "Extract Params", "type": "main", "index": 0 }]]
+    },
+    "Extract Params": {
+      "main": [[{ "node": "GitHub Get Commit", "type": "main", "index": 0 }]]
+    },
+    "GitHub Get Commit": {
+      "main": [[{ "node": "Filter Blueprints", "type": "main", "index": 0 }]]
+    },
+    "Filter Blueprints": {
+      "main": [[{ "node": "Split Batches", "type": "main", "index": 0 }]]
+    },
+    "Split Batches": {
+      "main": [[{ "node": "GitHub Get File", "type": "main", "index": 0 }]]
+    },
+    "GitHub Get File": {
+      "main": [[{ "node": "Decode JSON", "type": "main", "index": 0 }]]
+    },
+    "Decode JSON": {
+      "main": [[{ "node": "Get Existing Workflows", "type": "main", "index": 0 }]]
+    },
+    "Get Existing Workflows": {
+      "main": [[{ "node": "Match By Name", "type": "main", "index": 0 }]]
+    },
+    "Match By Name": {
+      "main": [[{ "node": "Upsert Workflow", "type": "main", "index": 0 }]]
+    },
+    "Upsert Workflow": {
+      "main": [[{ "node": "Log Result", "type": "main", "index": 0 }]]
+    },
+    "Log Result": {
+      "main": [[{ "node": "Next Batch", "type": "main", "index": 0 }]]
+    },
+    "Next Batch": {
+      "main": [[{ "node": "Split Batches", "type": "main", "index": 0 }]]
+    }
+  },
+  "meta": {
+    "templateId": "github-n8n-auto-sync-upsert",
+    "parameters": {
+      "WEBHOOK_PATH": {
+        "description": "Webhook path for GitHub push events",
+        "default": "github-sync",
+        "required": true
+      },
+      "DEFAULT_BRANCH": {
+        "description": "Default branch name if not detected",
+        "default": "main",
+        "required": false
+      },
+      "BLUEPRINTS_PATH": {
+        "description": "Path prefix for blueprint files in repository",
+        "default": "blueprints/",
+        "required": true
+      },
+      "N8N_BASE_URL": {
+        "description": "Base URL for n8n instance",
+        "default": "http://localhost:5678",
+        "required": true
+      },
+      "GITHUB_CREDENTIAL_ID": {
+        "description": "Credential ID for GitHub API access",
+        "default": "github-api",
+        "required": true
+      },
+      "N8N_API_CREDENTIAL_ID": {
+        "description": "Credential ID for n8n API access",
+        "default": "n8n-api",
+        "required": true
+      }
+    }
+  },
+  "settings": {
+    "saveManualExecutions": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all"
+  },
+  "tags": ["github", "sync", "automation", "ci-cd", "blueprints", "upsert"]
+}

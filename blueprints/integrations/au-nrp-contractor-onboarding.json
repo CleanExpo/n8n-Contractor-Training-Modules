@@ -1,0 +1,254 @@
+{
+  "name": "AU NRP Contractor Onboarding (Owners Only)",
+  "active": false,
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "1",
+      "name": "Start Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [200, 200]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            { "name": "BUSINESS_NAME", "value": "{{BUSINESS_NAME}}" },
+            { "name": "PRIMARY_STATE", "value": "{{PRIMARY_STATE}}" },
+            { "name": "PASSING_SCORE", "value": "{{PASSING_SCORE}}" },
+            { "name": "DRIVE_FOLDER_MANUALS", "value": "{{DRIVE_FOLDER_MANUALS}}" },
+            { "name": "DRIVE_FOLDER_ASSETS", "value": "{{DRIVE_FOLDER_ASSETS}}" },
+            { "name": "DRIVE_FOLDER_ASSESS", "value": "{{DRIVE_FOLDER_ASSESS}}" },
+            { "name": "DRIVE_FOLDER_CERTS", "value": "{{DRIVE_FOLDER_CERTS}}" },
+            { "name": "SHEET_VERSION_LOG_ID", "value": "{{SHEET_VERSION_LOG_ID}}" },
+            { "name": "IMAGE_STYLE", "value": "{{IMAGE_STYLE}}" },
+            { "name": "TTS_VOICE", "value": "{{TTS_VOICE}}" },
+            { "name": "VIDEO_MODE", "value": "{{VIDEO_MODE}}" }
+          ]
+        }
+      },
+      "id": "2",
+      "name": "Params",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [400, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "{{LLM_TEXT_API_URL}}",
+        "jsonParameters": true,
+        "options": { "timeout": 180000 },
+        "sendBody": true,
+        "bodyParametersJson": "={\n  \"model\": \"{{LLM_TEXT_MODEL}}\",\n  \"input\": {\n    \"businessName\": $json[\"BUSINESS_NAME\"],\n    \"primaryState\": $json[\"PRIMARY_STATE\"],\n    \"audience\": \"Owners Only\",\n    \"tone\": \"Professional, trades-friendly, plain AU English\",\n    \"outputs\": [\"manual_outline\", \"manual_sections\", \"quiz_items\", \"certificate_copy\"]\n  }\n}"
+      },
+      "id": "3",
+      "name": "LLM Synthesis",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [650, 200],
+      "credentials": {
+        "httpBasicAuth": { "id": "{{LLM_TEXT_CREDENTIAL_ID}}", "name": "LLM API Credentials" }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "{{LLM_TEXT_API_URL}}",
+        "jsonParameters": true,
+        "sendBody": true,
+        "bodyParametersJson": "={\n  \"task\": \"validate_au_only_compliance\",\n  \"text\": $json[\"manual_sections\"],\n  \"rules\": { \"auOnly\": true, \"ban\": [\"OSHA\", \"imperial\"] }\n}"
+      },
+      "id": "4",
+      "name": "AU Guard",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [900, 200],
+      "credentials": {
+        "httpBasicAuth": { "id": "{{LLM_TEXT_CREDENTIAL_ID}}", "name": "LLM API Credentials" }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "documentId": "",
+        "title": "NRP Contractor Onboarding Manual - {{BUSINESS_NAME}}",
+        "options": {
+          "folderId": "{{DRIVE_FOLDER_MANUALS}}"
+        },
+        "content": "={{$json[\"manual_sections\"]}}"
+      },
+      "id": "5",
+      "name": "Google Doc (Manual)",
+      "type": "n8n-nodes-base.googleDocs",
+      "typeVersion": 1,
+      "position": [1150, 200],
+      "credentials": {
+        "googleDocsOAuth2Api": { "id": "{{GOOGLE_DOCS_CREDENTIAL_ID}}", "name": "Google Docs Account" }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "return [{ quiz: $json[\"quiz_items\"], passingScore: $json[\"PASSING_SCORE\"] }];"
+      },
+      "id": "6",
+      "name": "Quiz Builder",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 2,
+      "position": [1400, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "{{GEMINI_IMAGE_API_URL}}",
+        "jsonParameters": true,
+        "sendBody": true,
+        "bodyParametersJson": "={\n  \"prompt\": \"Generate an educational illustration in {{IMAGE_STYLE}} style for: \" + $json[\"manual_outline\"]\n}"
+      },
+      "id": "7",
+      "name": "Gemini Images",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1650, 200],
+      "credentials": {
+        "httpBasicAuth": { "id": "{{GEMINI_CREDENTIAL_ID}}", "name": "Gemini API Credentials" }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "upload",
+        "parentId": "{{DRIVE_FOLDER_ASSETS}}",
+        "fileName": "Onboarding-Image-{{Date.now()}}.png",
+        "binaryData": true,
+        "binaryPropertyName": "data"
+      },
+      "id": "8",
+      "name": "Save Image to Drive",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 2,
+      "position": [1900, 200],
+      "credentials": {
+        "googleDriveOAuth2Api": { "id": "{{GOOGLE_DRIVE_CREDENTIAL_ID}}", "name": "Google Drive Account" }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "sheetId": "{{SHEET_VERSION_LOG_ID}}",
+        "range": "Sheet1!A:D",
+        "options": {},
+        "values": [
+          ["={{$json[\"BUSINESS_NAME\"]}}", "={{$json[\"PRIMARY_STATE\"]}}", "Version Run", "={{$now}}"]
+        ]
+      },
+      "id": "9",
+      "name": "Version Log",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 2,
+      "position": [2150, 200],
+      "credentials": {
+        "googleSheetsOAuth2Api": { "id": "{{GOOGLE_SHEETS_CREDENTIAL_ID}}", "name": "Google Sheets Account" }
+      }
+    }
+  ],
+  "connections": {
+    "Start Trigger": { "main": [[{ "node": "Params", "type": "main", "index": 0 }]] },
+    "Params": { "main": [[{ "node": "LLM Synthesis", "type": "main", "index": 0 }]] },
+    "LLM Synthesis": { "main": [[{ "node": "AU Guard", "type": "main", "index": 0 }]] },
+    "AU Guard": { "main": [[{ "node": "Google Doc (Manual)", "type": "main", "index": 0 }]] },
+    "Google Doc (Manual)": { "main": [[{ "node": "Quiz Builder", "type": "main", "index": 0 }]] },
+    "Quiz Builder": { "main": [[{ "node": "Gemini Images", "type": "main", "index": 0 }]] },
+    "Gemini Images": { "main": [[{ "node": "Save Image to Drive", "type": "main", "index": 0 }]] },
+    "Save Image to Drive": { "main": [[{ "node": "Version Log", "type": "main", "index": 0 }]] }
+  },
+  "meta": {
+    "templateId": "au-nrp-contractor-onboarding",
+    "parameters": {
+      "BUSINESS_NAME": {
+        "description": "Your business/company name",
+        "required": true,
+        "example": "CleanPro Services"
+      },
+      "PRIMARY_STATE": {
+        "description": "Primary Australian state (NSW, VIC, QLD, SA, WA, TAS, NT, ACT)",
+        "required": true,
+        "default": "NSW"
+      },
+      "PASSING_SCORE": {
+        "description": "Minimum passing score for assessment (percentage)",
+        "required": true,
+        "default": "80"
+      },
+      "DRIVE_FOLDER_MANUALS": {
+        "description": "Google Drive folder ID for storing training manuals",
+        "required": true
+      },
+      "DRIVE_FOLDER_ASSETS": {
+        "description": "Google Drive folder ID for storing images/assets",
+        "required": true
+      },
+      "DRIVE_FOLDER_ASSESS": {
+        "description": "Google Drive folder ID for assessments",
+        "required": true
+      },
+      "DRIVE_FOLDER_CERTS": {
+        "description": "Google Drive folder ID for certificates",
+        "required": true
+      },
+      "SHEET_VERSION_LOG_ID": {
+        "description": "Google Sheet ID for version logging",
+        "required": true
+      },
+      "IMAGE_STYLE": {
+        "description": "Image generation style (professional, cartoon, diagram, infographic)",
+        "default": "professional",
+        "required": false
+      },
+      "TTS_VOICE": {
+        "description": "Text-to-speech voice preference",
+        "default": "en-AU-Standard-A",
+        "required": false
+      },
+      "VIDEO_MODE": {
+        "description": "Video generation mode (slides, animated, talking-head)",
+        "default": "slides",
+        "required": false
+      },
+      "LLM_TEXT_API_URL": {
+        "description": "LLM API endpoint URL",
+        "required": true,
+        "example": "https://api.openai.com/v1/completions"
+      },
+      "LLM_TEXT_MODEL": {
+        "description": "LLM model to use",
+        "default": "gpt-4",
+        "required": true
+      },
+      "LLM_TEXT_CREDENTIAL_ID": {
+        "description": "Credential ID for LLM API",
+        "required": true
+      },
+      "GEMINI_IMAGE_API_URL": {
+        "description": "Gemini image generation API URL",
+        "required": true
+      },
+      "GEMINI_CREDENTIAL_ID": {
+        "description": "Credential ID for Gemini API",
+        "required": true
+      },
+      "GOOGLE_DOCS_CREDENTIAL_ID": {
+        "description": "Credential ID for Google Docs",
+        "required": true
+      },
+      "GOOGLE_DRIVE_CREDENTIAL_ID": {
+        "description": "Credential ID for Google Drive",
+        "required": true
+      },
+      "GOOGLE_SHEETS_CREDENTIAL_ID": {
+        "description": "Credential ID for Google Sheets",
+        "required": true
+      }
+    }
+  }
+}

@@ -2,6 +2,46 @@
   "version": 1,
   "blueprints": [
     {
+      "id": "au-nrp-contractor-onboarding",
+      "name": "AU NRP Contractor Onboarding",
+      "description": "Complete onboarding workflow for Australian contractors with LLM-generated training, assessments, and compliance checks",
+      "workflow": "integrations/au-nrp-contractor-onboarding.json",
+      "params": [
+        "BUSINESS_NAME", "PRIMARY_STATE", "PASSING_SCORE",
+        "DRIVE_FOLDER_MANUALS", "DRIVE_FOLDER_ASSETS", "DRIVE_FOLDER_ASSESS", "DRIVE_FOLDER_CERTS",
+        "SHEET_VERSION_LOG_ID", "IMAGE_STYLE", "TTS_VOICE", "VIDEO_MODE",
+        "LLM_TEXT_API_URL", "LLM_TEXT_MODEL", "LLM_TEXT_CREDENTIAL_ID",
+        "GEMINI_IMAGE_API_URL", "GEMINI_CREDENTIAL_ID",
+        "GOOGLE_DOCS_CREDENTIAL_ID", "GOOGLE_DRIVE_CREDENTIAL_ID", "GOOGLE_SHEETS_CREDENTIAL_ID"
+      ],
+      "credentials": ["httpBasicAuth", "googleDocsOAuth2Api", "googleDriveOAuth2Api", "googleSheetsOAuth2Api"],
+      "tags": ["onboarding", "training", "australia", "contractor", "llm", "automation"]
+    },
+    {
+      "id": "github-n8n-auto-import",
+      "name": "GitHub → n8n Auto-Import",
+      "description": "Automatically import blueprint workflows from GitHub repository on push events",
+      "workflow": "integrations/github-n8n-auto-import.json",
+      "params": [
+        "WEBHOOK_PATH", "DEFAULT_BRANCH", "BLUEPRINTS_PATH",
+        "N8N_BASE_URL", "GITHUB_CREDENTIAL_ID", "N8N_API_CREDENTIAL_ID"
+      ],
+      "credentials": ["httpHeaderAuth"],
+      "tags": ["github", "automation", "ci-cd", "blueprints", "import"]
+    },
+    {
+      "id": "github-n8n-auto-sync-upsert",
+      "name": "GitHub → n8n Auto-Sync (Upsert)",
+      "description": "Sync workflows from GitHub with update-or-create logic based on workflow name",
+      "workflow": "integrations/github-n8n-auto-sync-upsert.json",
+      "params": [
+        "WEBHOOK_PATH", "DEFAULT_BRANCH", "BLUEPRINTS_PATH",
+        "N8N_BASE_URL", "GITHUB_CREDENTIAL_ID", "N8N_API_CREDENTIAL_ID"
+      ],
+      "credentials": ["httpHeaderAuth"],
+      "tags": ["github", "sync", "automation", "ci-cd", "blueprints", "upsert"]
+    },
+    {
       "id": "github-to-sheets",
       "name": "GitHub → Google Sheets",
       "description": "Append GitHub webhook events as rows in a Google Sheet",

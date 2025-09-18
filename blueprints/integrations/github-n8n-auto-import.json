@@ -1,0 +1,229 @@
+{
+  "name": "GitHub → n8n Auto-Import (Blueprints)",
+  "active": false,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "{{WEBHOOK_PATH}}",
+        "options": {
+          "responseData": "ok"
+        },
+        "responseData": "OK"
+      },
+      "id": "n1",
+      "name": "GitHub Webhook (push)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [220, 260],
+      "webhookId": "github-auto-import"
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            { "name": "owner", "value": "={{$json.repository.owner.name || $json.repository.owner.login}}" },
+            { "name": "repo", "value": "={{$json.repository.name}}" },
+            { "name": "afterSha", "value": "={{$json.after}}" },
+            { "name": "branch", "value": "={{$json.ref?.split('/').slice(-1)[0] || '{{DEFAULT_BRANCH}}'}}" },
+            { "name": "blueprintsPathPrefix", "value": "{{BLUEPRINTS_PATH}}" }
+          ]
+        }
+      },
+      "id": "n2",
+      "name": "Extract Params",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [460, 260]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{'https://api.github.com/repos/' + $json.owner + '/' + $json.repo + '/commits/' + $json.afterSha}}",
+        "jsonParameters": true
+      },
+      "id": "n3",
+      "name": "GitHub Get Commit",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [700, 260],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "{{GITHUB_CREDENTIAL_ID}}",
+          "name": "GitHub API Token"
+        }
+      },
+      "options": {
+        "headerParameters": {
+          "parameters": [
+            { "name": "Accept", "value": "application/vnd.github+json" }
+          ]
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const changed = (items[0].json.files || []).filter(f => {\n  const p = $json.blueprintsPathPrefix || 'blueprints/';\n  return (f.status === 'added' || f.status === 'modified') && f.filename.startsWith(p) && f.filename.endsWith('.json');\n});\nreturn changed.map(f => ({ file: f.filename }));"
+      },
+      "id": "n4",
+      "name": "Filter Blueprint Files",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 2,
+      "position": [940, 260]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "n5",
+      "name": "Split In Batches",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 1,
+      "position": [1140, 260]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{'https://api.github.com/repos/' + $items(0).json.owner + '/' + $items(0).json.repo + '/contents/' + $json.file + '?ref=' + $items(0).json.branch}}",
+        "jsonParameters": true
+      },
+      "id": "n6",
+      "name": "GitHub Get File (contents)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1350, 200],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "{{GITHUB_CREDENTIAL_ID}}",
+          "name": "GitHub API Token"
+        }
+      },
+      "options": {
+        "headerParameters": {
+          "parameters": [
+            { "name": "Accept", "value": "application/vnd.github+json" }
+          ]
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "const c = items[0].json.content;\nif (!c) throw new Error('No content returned from GitHub.');\nconst buf = Buffer.from(c, 'base64');\nconst text = buf.toString('utf8');\nlet wf;\ntry { wf = JSON.parse(text); } catch (e) { throw new Error('Invalid JSON in blueprint: ' + e.message); }\nreturn [{ workflow: wf, file: items[0].json.path }];"
+      },
+      "id": "n7",
+      "name": "Decode & Parse JSON",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 2,
+      "position": [1560, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{N8N_BASE_URL}}/api/v1/workflows",
+        "jsonParameters": true,
+        "sendBody": true,
+        "options": { "timeout": 120000 },
+        "bodyParametersJson": "={{$json.workflow}}"
+      },
+      "id": "n8",
+      "name": "n8n Import Workflow (POST)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1770, 200],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "{{N8N_API_CREDENTIAL_ID}}",
+          "name": "n8n API Token"
+        }
+      },
+      "options": {
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "return items;"
+      },
+      "id": "n9",
+      "name": "Next Batch",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1980, 260]
+    }
+  ],
+  "connections": {
+    "GitHub Webhook (push)": {
+      "main": [[{ "node": "Extract Params", "type": "main", "index": 0 }]]
+    },
+    "Extract Params": {
+      "main": [[{ "node": "GitHub Get Commit", "type": "main", "index": 0 }]]
+    },
+    "GitHub Get Commit": {
+      "main": [[{ "node": "Filter Blueprint Files", "type": "main", "index": 0 }]]
+    },
+    "Filter Blueprint Files": {
+      "main": [[{ "node": "Split In Batches", "type": "main", "index": 0 }]]
+    },
+    "Split In Batches": {
+      "main": [[{ "node": "GitHub Get File (contents)", "type": "main", "index": 0 }]]
+    },
+    "GitHub Get File (contents)": {
+      "main": [[{ "node": "Decode & Parse JSON", "type": "main", "index": 0 }]]
+    },
+    "Decode & Parse JSON": {
+      "main": [[{ "node": "n8n Import Workflow (POST)", "type": "main", "index": 0 }]]
+    },
+    "n8n Import Workflow (POST)": {
+      "main": [[{ "node": "Next Batch", "type": "main", "index": 0 }]]
+    },
+    "Next Batch": {
+      "main": [[{ "node": "Split In Batches", "type": "main", "index": 0 }]]
+    }
+  },
+  "meta": {
+    "templateId": "github-n8n-auto-import",
+    "parameters": {
+      "WEBHOOK_PATH": {
+        "description": "Webhook path for GitHub push events",
+        "default": "github-push",
+        "required": true
+      },
+      "DEFAULT_BRANCH": {
+        "description": "Default branch name if not detected",
+        "default": "main",
+        "required": false
+      },
+      "BLUEPRINTS_PATH": {
+        "description": "Path prefix for blueprint files in repository",
+        "default": "blueprints/",
+        "required": true
+      },
+      "N8N_BASE_URL": {
+        "description": "Base URL for n8n instance",
+        "default": "http://localhost:5678",
+        "required": true
+      },
+      "GITHUB_CREDENTIAL_ID": {
+        "description": "Credential ID for GitHub API access",
+        "default": "github-api",
+        "required": true
+      },
+      "N8N_API_CREDENTIAL_ID": {
+        "description": "Credential ID for n8n API access",
+        "default": "n8n-api",
+        "required": true
+      }
+    }
+  },
+  "settings": {
+    "saveManualExecutions": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all"
+  },
+  "tags": ["github", "automation", "ci-cd", "blueprints", "import"]
+}
