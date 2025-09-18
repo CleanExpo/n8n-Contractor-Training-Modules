@@ -1,0 +1,252 @@
+{
+  "name": "AU NRP Contractor Onboarding (Owners Only, Orchestrated)",
+  "active": false,
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "1",
+      "name": "Start Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [200, 200]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://www.safeworkaustralia.gov.au/",
+        "responseFormat": "string"
+      },
+      "id": "2",
+      "name": "Safe Work AU (WHS)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [400, 100]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://www.accc.gov.au/",
+        "responseFormat": "string"
+      },
+      "id": "3",
+      "name": "ACCC (Consumer Law)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [400, 200]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://www.ato.gov.au/",
+        "responseFormat": "string"
+      },
+      "id": "4",
+      "name": "ATO (Tax)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [400, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "return [{\n  sources: [items[0].json, items[1].json, items[2].json].join('\\n\\n')\n}];"
+      },
+      "id": "5",
+      "name": "Combine Sources",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 2,
+      "position": [600, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.LLM_TEXT_API_URL}}",
+        "jsonParameters": true,
+        "sendBody": true,
+        "bodyParametersJson": "={\n  \"model\": \"{{$env.LLM_TEXT_MODEL}}\",\n  \"input\": {\n    \"task\": \"simplify\",\n    \"style\": \"Hemingway, 4th grade level, short sentences, plain AU English\",\n    \"content\": $json[\"sources\"]\n  }\n}"
+      },
+      "id": "6",
+      "name": "Simplify (Hemingway 4th grade)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [800, 200],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "{{LLM_TEXT_CREDENTIAL_ID}}",
+          "name": "LLM API Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.LLM_TEXT_API_URL}}",
+        "jsonParameters": true,
+        "sendBody": true,
+        "bodyParametersJson": "={\n  \"task\": \"orchestra_validate\",\n  \"rules\": {\n    \"auOnly\": true,\n    \"ban\": [\"OSHA\", \"imperial\"],\n    \"spelling\": \"Australian English\",\n    \"factCheck\": true\n  },\n  \"content\": $json\n}"
+      },
+      "id": "7",
+      "name": "Orchestra Validator",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1000, 200],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "{{LLM_TEXT_CREDENTIAL_ID}}",
+          "name": "LLM API Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "title": "AU NRP Onboarding Manual (Validated)",
+        "options": {
+          "folderId": "={{$env.DRIVE_FOLDER_MANUALS}}"
+        },
+        "content": "={{$json}}"
+      },
+      "id": "8",
+      "name": "Google Doc (Manual)",
+      "type": "n8n-nodes-base.googleDocs",
+      "typeVersion": 1,
+      "position": [1200, 200],
+      "credentials": {
+        "googleDocsOAuth2Api": {
+          "id": "{{GOOGLE_DOCS_CREDENTIAL_ID}}",
+          "name": "Google Docs OAuth2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "functionCode": "return [{ quiz: [{ q: 'What is your WHS duty of care?', a: ['Option A','Option B'], correct: 0 }], passingScore: 80 }];"
+      },
+      "id": "9",
+      "name": "Quiz Builder (JSON)",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 2,
+      "position": [1400, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.GEMINI_IMAGE_API_URL}}",
+        "jsonParameters": true,
+        "sendBody": true,
+        "bodyParametersJson": "={\n  \"prompt\": \"Educational illustration for onboarding manual: \" + $json\n}"
+      },
+      "id": "10",
+      "name": "Gemini Images",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1600, 200],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "{{GEMINI_CREDENTIAL_ID}}",
+          "name": "Gemini API Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "upload",
+        "parentId": "={{$env.DRIVE_FOLDER_ASSETS}}",
+        "fileName": "Onboarding-Illustration.png",
+        "binaryData": true,
+        "binaryPropertyName": "data"
+      },
+      "id": "11",
+      "name": "Save Image to Drive",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 2,
+      "position": [1800, 200],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "{{GOOGLE_DRIVE_CREDENTIAL_ID}}",
+          "name": "Google Drive OAuth2"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Start Trigger": {
+      "main": [[
+        {"node": "Safe Work AU (WHS)", "type": "main", "index": 0},
+        {"node": "ACCC (Consumer Law)", "type": "main", "index": 0},
+        {"node": "ATO (Tax)", "type": "main", "index": 0}
+      ]]
+    },
+    "Safe Work AU (WHS)": {
+      "main": [[{"node": "Combine Sources", "type": "main", "index": 0}]]
+    },
+    "ACCC (Consumer Law)": {
+      "main": [[{"node": "Combine Sources", "type": "main", "index": 0}]]
+    },
+    "ATO (Tax)": {
+      "main": [[{"node": "Combine Sources", "type": "main", "index": 0}]]
+    },
+    "Combine Sources": {
+      "main": [[{"node": "Simplify (Hemingway 4th grade)", "type": "main", "index": 0}]]
+    },
+    "Simplify (Hemingway 4th grade)": {
+      "main": [[{"node": "Orchestra Validator", "type": "main", "index": 0}]]
+    },
+    "Orchestra Validator": {
+      "main": [[
+        {"node": "Google Doc (Manual)", "type": "main", "index": 0},
+        {"node": "Quiz Builder (JSON)", "type": "main", "index": 0},
+        {"node": "Gemini Images", "type": "main", "index": 0}
+      ]]
+    },
+    "Gemini Images": {
+      "main": [[{"node": "Save Image to Drive", "type": "main", "index": 0}]]
+    }
+  },
+  "meta": {
+    "templateId": "au-nrp-contractor-onboarding-orchestrated",
+    "parameters": {
+      "LLM_TEXT_API_URL": {
+        "description": "LLM API endpoint for text processing",
+        "required": true
+      },
+      "LLM_TEXT_MODEL": {
+        "description": "LLM model name for text tasks",
+        "required": true
+      },
+      "LLM_TEXT_CREDENTIAL_ID": {
+        "description": "Credential ID for LLM API authentication",
+        "required": true
+      },
+      "GEMINI_IMAGE_API_URL": {
+        "description": "Gemini API endpoint for image generation",
+        "required": true
+      },
+      "GEMINI_CREDENTIAL_ID": {
+        "description": "Credential ID for Gemini API",
+        "required": true
+      },
+      "GOOGLE_DOCS_CREDENTIAL_ID": {
+        "description": "Credential ID for Google Docs OAuth2",
+        "required": true
+      },
+      "GOOGLE_DRIVE_CREDENTIAL_ID": {
+        "description": "Credential ID for Google Drive OAuth2",
+        "required": true
+      },
+      "DRIVE_FOLDER_MANUALS": {
+        "description": "Google Drive folder ID for manuals",
+        "required": true
+      },
+      "DRIVE_FOLDER_ASSETS": {
+        "description": "Google Drive folder ID for assets",
+        "required": true
+      }
+    }
+  },
+  "settings": {
+    "saveManualExecutions": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all"
+  },
+  "tags": ["onboarding", "training", "australia", "contractor", "llm", "orchestrated", "validation"]
+}

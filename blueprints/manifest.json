@@ -18,6 +18,20 @@
       "tags": ["onboarding", "training", "australia", "contractor", "llm", "automation"]
     },
     {
+      "id": "au-nrp-contractor-onboarding-orchestrated",
+      "name": "AU NRP Contractor Onboarding (Orchestrated)",
+      "description": "Streamlined onboarding with orchestrated validation, simplified content generation, and automated compliance checks for AU contractors",
+      "workflow": "integrations/au-nrp-contractor-onboarding-orchestrated.json",
+      "params": [
+        "LLM_TEXT_API_URL", "LLM_TEXT_MODEL", "LLM_TEXT_CREDENTIAL_ID",
+        "GEMINI_IMAGE_API_URL", "GEMINI_CREDENTIAL_ID",
+        "GOOGLE_DOCS_CREDENTIAL_ID", "GOOGLE_DRIVE_CREDENTIAL_ID",
+        "DRIVE_FOLDER_MANUALS", "DRIVE_FOLDER_ASSETS"
+      ],
+      "credentials": ["httpHeaderAuth", "googleDocsOAuth2Api", "googleDriveOAuth2Api"],
+      "tags": ["onboarding", "training", "australia", "contractor", "llm", "orchestrated", "validation"]
+    },
+    {
       "id": "github-n8n-auto-import",
       "name": "GitHub → n8n Auto-Import",
       "description": "Automatically import blueprint workflows from GitHub repository on push events",
